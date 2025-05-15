@@ -1,8 +1,16 @@
+@font-face {
+    font-family: 'MyCustomFont';
+    src: url('fonts/you-re-gone/Youre Gone.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
 html, body {
     margin: 0;
     padding: 0;
     overflow: hidden;
     height: 100%;
+    font-family: 'MyCustomFont', sans-serif;
 }
 
 #gameCanvas {
@@ -13,20 +21,33 @@ html, body {
     top: 0;
     left: 0;
     z-index: 0;
+       border: 8px solid rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.15);
+    box-sizing: border-box;
 }
 
 #ui {
     position: absolute;
     top: 20px;
-    left: 0;
-    width: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px;
+    padding: 10px 20px;
     z-index: 10;
-    pointer-events: none; /* Important : n'interfère pas avec la souris sauf boutons */
+    pointer-events: none;
+
+    /* Ajouts pour le style */
+    background: rgba(255, 255, 255, 0.6);
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
+
 
 #score {
     font-size: 24px;

@@ -22,20 +22,25 @@ function resizeCanvas() {
     // État du jeu
     let snake = [];
     let food = {};
-    let mouseX = 0;
-    let mouseY = 0;
+    let targetX = 0;
+    let targetY = 0;
+    let direction = { x: 1, y: 0 }; // Direction initiale vers la droite
     let gameLoop;
     let score = 0;
     let gameRunning = false;
+    const snakeSpeed = 3; // Vitesse de déplacement du serpent
     
     // Initialisation du jeu
     function initGame() {
         // Réinitialiser le serpent
-        snake = [
-            {x: 5, y: 10},
-            {x: 4, y: 10},
-            {x: 3, y: 10}
-        ];
+        snake = [];
+        // Créer un serpent droit au départ
+        for (let i = 0; i < 15; i++) {
+            snake.push({
+                x: 10 - i * 0.1,  // Léger décalage pour la fluidité
+                y: 10
+            });
+        }
         
         // Positionner la nourriture
         placeFood();
@@ -45,16 +50,16 @@ function resizeCanvas() {
         scoreElement.textContent = score;
         gameRunning = true;
         
-        // Positionner la souris au centre du canvas
-        mouseX = canvas.width / 2;
-        mouseY = canvas.height / 2;
+        // Positionner la cible légèrement à droite du serpent au démarrage
+        targetX = canvas.width * 0.7;
+        targetY = canvas.height / 2;
     }
     
     // Placer la nourriture à une position aléatoire
     function placeFood() {
         food = {
-            x: Math.floor(Math.random() * tileCount),
-            y: Math.floor(Math.random() * tileCount)
+            x: Math.floor(Math.random() * tileCount) + 1 ,
+            y: Math.floor(Math.random() * tileCount) + 1
         };
         
         // Vérifier que la nourriture n'est pas sur le serpent
@@ -75,16 +80,38 @@ function resizeCanvas() {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Dessiner le serpent
+        // Dessiner le serpent avec une traînée fluide
         ctx.fillStyle = '#4CAF50';
         for (let i = 0; i < snake.length; i++) {
             const segment = snake[i];
-            ctx.fillRect(
-                segment.x * gridSize, 
-                segment.y * gridSize, 
-                gridSize - 1, 
-                gridSize - 1
+            const nextSegment = snake[i + 1] || segment;
+            
+            // Dessiner un cercle à chaque segment
+            ctx.beginPath();
+            ctx.arc(
+                segment.x * gridSize + gridSize/2, 
+                segment.y * gridSize + gridSize/2, 
+                gridSize/2 - 1, 
+                0, 
+                Math.PI * 2
             );
+            ctx.fill();
+            
+            // Dessiner une ligne entre les segments pour une apparence plus fluide
+            if (i < snake.length - 1) {
+                ctx.beginPath();
+                ctx.moveTo(
+                    segment.x * gridSize + gridSize/2, 
+                    segment.y * gridSize + gridSize/2
+                );
+                ctx.lineTo(
+                    nextSegment.x * gridSize + gridSize/2, 
+                    nextSegment.y * gridSize + gridSize/2
+                );
+                ctx.lineWidth = gridSize - 2;
+                ctx.strokeStyle = '#4CAF50';
+                ctx.stroke();
+            }
         }
         
         // Dessiner une animation de pulsation pour la nourriture
@@ -94,55 +121,65 @@ function resizeCanvas() {
 
         ctx.fillStyle = '#FF5252';
         ctx.beginPath();
-        ctx.arc(foodCenterX, foodCenterY, pulseRadius, 0, Math.PI * 2);
+        ctx.arc(
+            food.x * gridSize + gridSize/2, 
+            food.y * gridSize + gridSize/2, 
+            gridSize/2 - 1, 
+            0, 
+            Math.PI * 2
+        );
         ctx.fill();
-
-        foodAnimationFrame++;
     }
     
     // Mise à jour du jeu
     function update() {
         if (!gameRunning) return;
         
-        // Calculer la direction vers la souris
+        // Calculer la direction vers la cible
         const head = {x: snake[0].x, y: snake[0].y};
         const headPixelX = head.x * gridSize + gridSize / 2;
         const headPixelY = head.y * gridSize + gridSize / 2;
         
-        // Calculer l'angle vers la souris
-        const dx = mouseX - headPixelX;
-        const dy = mouseY - headPixelY;
+        // Calculer la direction vers la cible
+        const dx = targetX - headPixelX;
+        const dy = targetY - headPixelY;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        // Si la souris est assez proche, ne pas bouger
-        if (distance < 5) return;
+        // Mettre à jour la direction si on est pas trop proche
+        if (distance > 5) {
+            // Normaliser la direction
+            direction = {
+                x: dx / distance,
+                y: dy / distance
+            };
+        }
         
-        // Normaliser la direction
-        const dirX = dx / distance;
-        const dirY = dy / distance;
+        // Déplacer la tête dans la direction actuelle
+        head.x += direction.x * (snakeSpeed / 10);
+        head.y += direction.y * (snakeSpeed / 10);
         
-        // Déplacer la tête dans la direction de la souris
-        head.x += dirX * 0.3; // Vitesse réduite pour un meilleur contrôle
-        head.y += dirY * 0.3;
-        
-        // Arrondir aux coordonnées de la grille
-        head.x = Math.round(head.x * 10) / 10;
-        head.y = Math.round(head.y * 10) / 10;
+        // Arrondir aux coordonnées de la grille pour la détection de collision
+        const gridX = Math.round(head.x);
+        const gridY = Math.round(head.y);
         
         // Vérifier les collisions avec les murs
         if (
-            head.x < 0 || 
-            head.x >= tileCount || 
-            head.y < 0 || 
-            head.y >= tileCount
+            gridX < 0 || 
+            gridX >= tileCount || 
+            gridY < 0 || 
+            gridY >= tileCount
         ) {
             gameOver();
             return;
         }
         
-        // Vérifier les collisions avec le serpent
-        for (let i = 0; i < snake.length; i++) {
-            if (head.x === snake[i].x && head.y === snake[i].y) {
+        // Vérifier les collisions avec le corps du serpent
+        // On commence à l'index 10 pour éviter les fausses collisions avec les segments proches de la tête
+        for (let i = 10; i < snake.length; i++) {
+            const segment = snake[i];
+            // Vérifier la collision uniquement sur la grille (comme dans un vrai Snake)
+            if (Math.round(head.x) === Math.round(segment.x) && 
+                Math.round(head.y) === Math.round(segment.y)) {
                 gameOver();
                 return;
             }
@@ -151,8 +188,13 @@ function resizeCanvas() {
         // Ajouter la nouvelle tête
         snake.unshift(head);
         
-        // Vérifier si le serpent mange la nourriture
-        if (head.x === food.x && head.y === food.y) {
+        // Vérifier si le serpent mange la nourriture (avec une marge de 0.3 pour une meilleure jouabilité)
+        const foodDistance = Math.sqrt(
+            Math.pow(head.x - food.x, 2) + 
+            Math.pow(head.y - food.y, 2)
+        );
+        
+        if (foodDistance < 0.3) {
             // Augmenter le score
             score += 10;
             scoreElement.textContent = score;
@@ -178,20 +220,23 @@ function resizeCanvas() {
         draw();
     }
     
-    // Suivre la position de la souris
-    canvas.addEventListener('mousemove', (e) => {
+    // Mettre à jour la cible au clic ou au toucher
+    function updateTarget(e) {
         const rect = canvas.getBoundingClientRect();
-        mouseX = e.clientX - rect.left;
-        mouseY = e.clientY - rect.top;
-    });
+        targetX = (e.clientX || e.touches[0].clientX) - rect.left;
+        targetY = (e.clientY || e.touches[0].clientY) - rect.top;
+    }
+    
+    // Écouter les événements de souris
+    canvas.addEventListener('mousemove', updateTarget);
+    canvas.addEventListener('click', updateTarget);
     
     // Gérer le toucher sur mobile
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        mouseX = e.touches[0].clientX - rect.left;
-        mouseY = e.touches[0].clientY - rect.top;
+        updateTarget(e);
     }, { passive: false });
+    canvas.addEventListener('touchstart', updateTarget, { passive: false });
     
     // Démarrer le jeu
     startButton.addEventListener('click', () => {
@@ -199,10 +244,11 @@ function resizeCanvas() {
             clearInterval(gameLoop);
         }
         initGame();
-        gameLoop = setInterval(game, 50); // Vitesse augmentée pour un meilleur suivi
+        gameLoop = setInterval(game, 1000/15); // Environ 15 FPS
     });
     
     // Initialisation initiale
     initGame();
+    // Afficher l'écran de démarrage
     draw();
 });
