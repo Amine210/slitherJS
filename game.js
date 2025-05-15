@@ -3,14 +3,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctx = canvas.getContext('2d');
     const scoreElement = document.getElementById('score');
     const startButton = document.getElementById('startButton');
-    
+    const ui = document.getElementById("ui");
+    const uiHeight = ui.offsetHeight;
     // Configuration du jeu
     const gridSize = 20;
     const tileCount = 20;
     let foodAnimationFrame = 0;
 function resizeCanvas() {
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.height = window.innerHeight 
     tileCountX = Math.floor(canvas.width / gridSize);
     tileCountY = Math.floor(canvas.height / gridSize);
 }
@@ -56,24 +57,30 @@ function resizeCanvas() {
     }
     
     // Placer la nourriture à une position aléatoire
-    function placeFood() {
-        food = {
-            x: Math.floor(Math.random() * tileCount) + 1 ,
-            y: Math.floor(Math.random() * tileCount) + 1
-        };
-        
-        // Vérifier que la nourriture n'est pas sur le serpent
-        for (let segment of snake) {
-            console.log("segment.x : " + segment.x) 
-            console.log("segment.y : " +segment.y)
-            console.log("food.x : " +food.x)
-            console.log("food.y : " +food.y)
-            if (segment.x === food.x && segment.y === food.y) {
-                return placeFood();
-            }
+function placeFood() {
+    const marginPx = 50;
+    const marginTiles = Math.ceil(marginPx / gridSize);
+
+    const minX = marginTiles;
+    const maxX = tileCountX - marginTiles - 1;
+
+    const minY = marginTiles + 5;
+    console.log(minY)
+    const maxY = tileCountY - marginTiles - 1;
+
+    food = {
+        x: Math.floor(Math.random() * (maxX - minX + 1)) + minX,
+        y: Math.floor(Math.random() * (maxY - minY + 1)) + minY
+    };
+
+    for (let segment of snake) {
+        if (segment.x === food.x && segment.y === food.y) {
+            return placeFood();
         }
     }
-    
+}
+
+        
     // Fonction de dessin
     function draw() {
         // Effacer le canvas
@@ -157,6 +164,8 @@ function resizeCanvas() {
         // Déplacer la tête dans la direction actuelle
         head.x += direction.x * (snakeSpeed / 10);
         head.y += direction.y * (snakeSpeed / 10);
+
+
         
         // Arrondir aux coordonnées de la grille pour la détection de collision
         const gridX = Math.round(head.x);
@@ -194,7 +203,7 @@ function resizeCanvas() {
             Math.pow(head.y - food.y, 2)
         );
         
-        if (foodDistance < 0.3) {
+        if (foodDistance < 1) {
             // Augmenter le score
             score += 10;
             scoreElement.textContent = score;
