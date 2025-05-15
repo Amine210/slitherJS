@@ -1,49 +1,50 @@
-body {
+html, body {
     margin: 0;
     padding: 0;
+    overflow: hidden;
+    height: 100%;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+}
+
+#ui {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    width: 100%;
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
-    min-height: 100vh;
-    background-color: #f0f0f0;
-    font-family: Arial, sans-serif;
+    padding: 0 20px;
+    z-index: 10;
+    pointer-events: none; /* Important : n'interfère pas avec la souris sauf boutons */
 }
 
-.game-container {
-    text-align: center;
-}
-
-canvas {
-    border: 2px solid #333;
-    background-color: #fff;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.score {
-    margin: 20px 0;
+#score {
     font-size: 24px;
     font-weight: bold;
+    color: #333;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 8px 16px;
+    border-radius: 8px;
+    pointer-events: auto;
 }
 
-button {
+#startButton {
+    font-size: 18px;
     padding: 10px 20px;
-    font-size: 16px;
     background-color: #4CAF50;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s;
-}
-
-button:hover {
-    background-color: #45a049;
-}
-
-#gameOver {
-    display: none;
-    color: #ff0000;
-    font-size: 36px;
-    font-weight: bold;
-    margin-top: 20px;
+    pointer-events: auto;
 }

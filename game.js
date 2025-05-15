@@ -7,8 +7,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Configuration du jeu
     const gridSize = 20;
     const tileCount = 20;
-    canvas.width = gridSize * tileCount;
-    canvas.height = gridSize * tileCount;
+    let foodAnimationFrame = 0;
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    tileCountX = Math.floor(canvas.width / gridSize);
+    tileCountY = Math.floor(canvas.height / gridSize);
+}
+
+    let tileCountX, tileCountY;
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
     
     // État du jeu
     let snake = [];
@@ -50,6 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Vérifier que la nourriture n'est pas sur le serpent
         for (let segment of snake) {
+            console.log("segment.x : " + segment.x) 
+            console.log("segment.y : " +segment.y)
+            console.log("food.x : " +food.x)
+            console.log("food.y : " +food.y)
             if (segment.x === food.x && segment.y === food.y) {
                 return placeFood();
             }
@@ -74,14 +87,17 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         }
         
-        // Dessiner la nourriture
+        // Dessiner une animation de pulsation pour la nourriture
+        const foodCenterX = food.x * gridSize + gridSize / 2;
+        const foodCenterY = food.y * gridSize + gridSize / 2;
+        const pulseRadius = (gridSize / 2) * (1 + 0.3 * Math.sin(foodAnimationFrame / 5));
+
         ctx.fillStyle = '#FF5252';
-        ctx.fillRect(
-            food.x * gridSize, 
-            food.y * gridSize, 
-            gridSize - 1, 
-            gridSize - 1
-        );
+        ctx.beginPath();
+        ctx.arc(foodCenterX, foodCenterY, pulseRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        foodAnimationFrame++;
     }
     
     // Mise à jour du jeu
