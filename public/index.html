@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Multijoueur</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+
+        #gameCanvas {
+            display: block;
+            background-color: white;
+        }
+
+        #ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        #scoreboard {
+            display: flex;
+            gap: 20px;
+        }
+
+        .score-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+            display: inline-block;
+        }
+
+        #startButton {
+            padding: 5px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #startButton:hover {
+            background-color: #45a049;
+        }
+
+        #status {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            display: none;
+            z-index: 100;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 20;
+        }
+
+        #activeEffects {
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 15;
+        }
+
+        .effect-badge {
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .effect-badge .timer {
+            font-size: 12px;
+            background-color: rgba(255, 255, 255, 0.2);
+            padding: 2px 5px;
+            border-radius: 10px;
+        }
+
+        @media (max-width: 768px) {
+            #controls {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="ui">
+    <div id="scoreboard">
+        <div class="score-item">
+            <div class="color-dot" id="myColorDot"></div>
+            <span>Vous: <span id="myScore">0</span></span>
+        </div>
+    </div>
+    <button id="startButton">Rejoindre la partie</button>
+</div>
+<div id="status"></div>
+<div id="controls">Espace = Accélérer (réduit la taille) | Souris = Diriger</div>
+<div id="activeEffects"></div>
+<canvas id="gameCanvas"></canvas>
+
+<!-- Définir les SVG des bonus -->
+<svg style="display: none;">
+    <defs>
+        <!-- Bonus de vitesse -->
+        <symbol id="speedBonus" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="18" fill="#FFA500" stroke="white" stroke-width="2"/>
+            <path d="M30 20 L15 10 L15 30 Z" fill="white"/>
+        </symbol>
+
+        <!-- Bonus de taille -->
+        <symbol id="sizeBonus" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="18" fill="#9C27B0" stroke="white" stroke-width="2"/>
+            <rect x="12" y="12" width="16" height="16" fill="white"/>
+        </symbol>
+
+        <!-- Bonus de points -->
+        <symbol id="pointsBonus" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="18" fill="#2196F3" stroke="white" stroke-width="2"/>
+            <text x="20" y="25" text-anchor="middle" fill="white" font-weight="bold" font-size="20">+</text>
+        </symbol>
+
+        <!-- Bonus d'invincibilité -->
+        <symbol id="invincible<!DOCTYPE html>
+<html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Snake Multijoueur</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: Arial, sans-serif;
+                    overflow: hidden;
+                    background-color: #f0f0f0;
+                }
+
+                #gameCanvas {
+                    display: block;
+                    background-color: white;
+                }
+
+                #ui {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    padding: 10px;
+                    background-color: rgba(0, 0, 0, 0.7);
+                    color: white;
+                    display: flex;
+                    justify-content: space-between;
+                    z-index: 10;
+                }
+
+                #scoreboard {
+                    display: flex;
+                    gap: 20px;
+                }
+
+                .score-item {
+                    display: flex;
+                    align-items: center;
+                }
+
+                .color-dot {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    margin-right: 5px;
+                    display: inline-block;
+                }
+
+                #startButton {
+                    padding: 5px 15px;
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 16px;
+                }
+
+                #startButton:hover {
+                    background-color: #45a049;
+                }
+
+                #status {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background-color: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    font-size: 24px;
+                    display: none;
+                    z-index: 100;
+                }
+            </style>
+        </head>
+        <body>
+        <div id="ui">
+            <div id="scoreboard">
+                <div class="score-item">
+                    <div class="color-dot" id="myColorDot"></div>
+                    <span>Vous: <span id="myScore">0</span></span>
+                </div>
+            </div>
+            <button id="startButton">Rejoindre la partie</button>
+        </div>
+        <div id="status"></div>
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Charger Socket.io -->
+        <script src="/socket.io/socket.io.js"></script>
+
+        <!-- Charger le script du jeu -->
+        <script src="/js/game.js"></script>
+        </body>
+</html>
