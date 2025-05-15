@@ -129,13 +129,13 @@
     <div id="scoreboard">
         <div class="score-item">
             <div class="color-dot" id="myColorDot"></div>
-            <span>Vous: <span id="myScore">0</span></span>
-        </div>
+            <span><span id="myUsername">Anonyme</span>: <span id="myScore">0</span></span>
+            </div>
     </div>
     <button id="startButton">Rejoindre la partie</button>
 </div>
 <div id="status"></div>
-<div id="controls">Espace = Accélérer (réduit la taille) | Souris = Diriger</div>
+<div id="controls"><strong>ESPACE</strong> = Accélérer pendant 2 secondes (réduit la taille) | <strong>Double Tap</strong> = Accélérer sur mobile | <strong>Souris</strong> = Diriger</div>
 <div id="activeEffects"></div>
 <canvas id="gameCanvas"></canvas>
 
@@ -161,103 +161,15 @@
         </symbol>
 
         <!-- Bonus d'invincibilité -->
-        <symbol id="invincible<!DOCTYPE html>
-<html lang="fr">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Snake Multijoueur</title>
-            <style>
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: Arial, sans-serif;
-                    overflow: hidden;
-                    background-color: #f0f0f0;
-                }
+        <symbol id="invincibleBonus" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="18" fill="#FFEB3B" stroke="white" stroke-width="2"/>
+            <path d="M15 15 L25 15 L25 25 L15 25 Z" fill="white"/>
+        </symbol>
+    </defs>
+</svg>
 
-                #gameCanvas {
-                    display: block;
-                    background-color: white;
-                }
+<!-- Charger Socket.io -->
+<script src="/socket.io/socket.io.js"></script>
 
-                #ui {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    padding: 10px;
-                    background-color: rgba(0, 0, 0, 0.7);
-                    color: white;
-                    display: flex;
-                    justify-content: space-between;
-                    z-index: 10;
-                }
-
-                #scoreboard {
-                    display: flex;
-                    gap: 20px;
-                }
-
-                .score-item {
-                    display: flex;
-                    align-items: center;
-                }
-
-                .color-dot {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    margin-right: 5px;
-                    display: inline-block;
-                }
-
-                #startButton {
-                    padding: 5px 15px;
-                    background-color: #4CAF50;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 16px;
-                }
-
-                #startButton:hover {
-                    background-color: #45a049;
-                }
-
-                #status {
-                    position: fixed;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    background-color: rgba(0, 0, 0, 0.8);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    font-size: 24px;
-                    display: none;
-                    z-index: 100;
-                }
-            </style>
-        </head>
-        <body>
-        <div id="ui">
-            <div id="scoreboard">
-                <div class="score-item">
-                    <div class="color-dot" id="myColorDot"></div>
-                    <span>Vous: <span id="myScore">0</span></span>
-                </div>
-            </div>
-            <button id="startButton">Rejoindre la partie</button>
-        </div>
-        <div id="status"></div>
-        <canvas id="gameCanvas"></canvas>
-
-        <!-- Charger Socket.io -->
-        <script src="/socket.io/socket.io.js"></script>
-
-        <!-- Charger le script du jeu -->
-        <script src="/js/game.js"></script>
-        </body>
-</html>
+<!-- Charger le script du jeu -->
+<script src="/js/game.js"></script>

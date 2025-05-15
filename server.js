@@ -15,11 +15,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 const gameState = {
     players: {}, // Map des joueurs connectés
     foods: [],   // Liste des nourritures sur le terrain
-    bonuses: []  // Liste des bonus sur le terrain
+    bonuses: [], // Liste des bonus sur le terrain
+    leaderboard: [] // Tableau des meilleurs scores
 };
 
 // Configuration du jeu
-const gridSize = 20;
+const gridSize = 40;
 let tileCountX = 40; // À ajuster selon vos besoins
 let tileCountY = 30; // À ajuster selon vos besoins
 
@@ -148,6 +149,7 @@ io.on('connection', (socket) => {
         targetY: 0,
         score: 0,
         color: playerColor,
+        username: `Joueur_${socket.id.substring(0, 4)}`, // Pseudo par défaut avec ID tronqué
         isAccelerating: false,
         normalSpeed: 3,
         accelerationSpeed: 6,
@@ -193,6 +195,22 @@ io.on('connection', (socket) => {
     socket.on('updateAcceleration', (data) => {
         if (gameState.players[socket.id]) {
             gameState.players[socket.id].isAccelerating = data.isAccelerating;
+        }
+    });
+    
+    // Mettre à jour le pseudonyme du joueur
+    socket.on('updateUsername', (data) => {
+        if (gameState.players[socket.id] && data.username) {
+            // Limiter la longueur et retirer les caractères non appropriés
+            const sanitizedUsername = data.username.substring(0, 15).replace(/[^\w\s\-]/gi, '');
+            gameState.players[socket.id].username = sanitizedUsername || `Joueur_${socket.id.substring(0, 4)}`;
+            console.log(`Joueur ${socket.id} a changé son nom en: ${gameState.players[socket.id].username}`);
+            
+            // Mettre à jour l'affichage pour tous les joueurs
+            io.emit('playerUpdated', {
+                playerId: socket.id,
+                username: gameState.players[socket.id].username
+            });
         }
     });
 
@@ -416,10 +434,29 @@ const gameLoopInterval = setInterval(() => {
             gameState.bonuses.splice(i, 1);
         }
     }
+    
+    // Mettre à jour le tableau des meilleurs scores
+    updateLeaderboard();
 
     // Envoyer l'état mis à jour à tous les joueurs
     io.emit('gameUpdate', gameState);
 }, 1000/15); // Environ 15 FPS
+
+// Fonction pour mettre à jour le tableau des meilleurs scores
+function updateLeaderboard() {
+    // Créer un tableau des joueurs triés par score
+    const sortedPlayers = Object.values(gameState.players)
+        .map(player => ({
+            id: Object.keys(gameState.players).find(key => gameState.players[key] === player),
+            username: player.username,
+            score: player.score,
+            color: player.color
+        }))
+        .sort((a, b) => b.score - a.score);
+    
+    // Garder seulement les 10 meilleurs joueurs
+    gameState.leaderboard = sortedPlayers.slice(0, 10);
+}
 
 // Fonction pour réinitialiser un joueur
 function resetPlayer(playerId) {

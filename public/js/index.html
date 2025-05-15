@@ -4,14 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Snake Game</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../style.css">
 </head>
 <body>
     <div id="ui">
     <div id="score">0</div>
     <button id="startButton">Start</button>
     </div>
+    
+    <div id="boostIndicator">
+        <div id="boostLabel">BOOST!</div>
+        <div id="boostProgressContainer">
+            <div id="boostProgress"></div>
+        </div>
+    </div>
     <canvas id="gameCanvas"></canvas>
-    <script src="game.js"></script>
+    <script src="../../game.js"></script>
 </body>
 </html>
