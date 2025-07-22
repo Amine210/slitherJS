@@ -3,173 +3,491 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake Multijoueur</title>
+    <title>Snake.io - Jeu Multijoueur</title>
     <style>
-        body {
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        
+        * {
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
             overflow: hidden;
-            background-color: #f0f0f0;
+            background: #161c22;
+            color: white;
+            position: relative;
         }
 
         #gameCanvas {
             display: block;
-            background-color: white;
-        }
-
-        #ui {
-            position: fixed;
+            background: #111922;
+            position: absolute;
             top: 0;
             left: 0;
-            right: 0;
-            padding: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            display: flex;
-            justify-content: space-between;
-            z-index: 10;
+            cursor: crosshair;
         }
 
-        #scoreboard {
-            display: flex;
-            gap: 20px;
-        }
-
-        .score-item {
-            display: flex;
-            align-items: center;
-        }
-
-        .color-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 5px;
-            display: inline-block;
-        }
-
-        #startButton {
-            padding: 5px 15px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        #startButton:hover {
-            background-color: #45a049;
-        }
-
-        #status {
+        /* Menu principal */
+        #mainMenu {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            font-size: 24px;
-            display: none;
-            z-index: 100;
-        }
-
-        #controls {
-            position: fixed;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 16px;
-            z-index: 20;
-        }
-
-        #activeEffects {
-            position: fixed;
-            top: 50px;
-            right: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            z-index: 15;
-        }
-
-        .effect-badge {
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 5px 10px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
             border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            min-width: 400px;
+        }
+
+        #mainMenu h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff006e, #8338ec, #3a86ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        #mainMenu p {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        #usernameInputMenu {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        #usernameInputMenu:focus {
+            outline: none;
+            border-color: #3a86ff;
+            background: rgba(58, 134, 255, 0.1);
+        }
+
+        #playButton {
+            width: 100%;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: 600;
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        #playButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(131, 56, 236, 0.4);
+        }
+
+        /* UI en jeu */
+        #gameUI {
+            display: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #gameUI > * {
+            pointer-events: auto;
+        }
+
+        /* Score et infos en haut */
+        #topBar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #scoreDisplay {
+            font-size: 24px;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 10px;
         }
 
-        .effect-badge .timer {
-            font-size: 12px;
-            background-color: rgba(255, 255, 255, 0.2);
-            padding: 2px 5px;
+        #myColorIndicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        /* Leaderboard moderne */
+        #leaderboard {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            min-width: 250px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #leaderboard h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .leaderboard-rank {
+            width: 30px;
+            font-weight: 600;
+            color: #888;
+        }
+
+        .leaderboard-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .leaderboard-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .leaderboard-score {
+            font-weight: 600;
+            color: #ffd700;
+        }
+
+        .current-player {
+            background: rgba(58, 134, 255, 0.2);
+            margin: 0 -10px;
+            padding-left: 10px;
+            padding-right: 10px;
+            border-radius: 5px;
+        }
+
+        /* Minimap */
+        #minimap {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 10px;
+            overflow: hidden;
         }
 
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Messages de statut */
+        #statusMessage {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: 600;
+            display: none;
+            z-index: 100;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Contrôles */
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-size: 12px;
+            color: #888;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .control-key {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* Boost indicator */
+        #boostBar {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            overflow: hidden;
+            display: none;
+        }
+
+        #boostFill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff006e, #8338ec);
+            transition: width 0.1s;
+            width: 100%;
+        }
+
+        /* Bouton options */
+        #optionsButton {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #optionsButton:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Stats du joueur */
+        #playerStats {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            color: #888;
+        }
+
+        .stat-value {
+            color: white;
+            font-weight: 600;
+        }
+
+        /* Effets de particules pour le canvas */
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+        }
+
+        /* Modal de changement de pseudo */
+        #changeNameModal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            z-index: 1000;
+            min-width: 300px;
+        }
+
+        #changeNameModal h3 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #newUsernameInput {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #confirmNameChange {
+            background: #3a86ff;
+            color: white;
+        }
+
+        #cancelNameChange {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
+            #mainMenu {
+                min-width: 90%;
+                padding: 30px 20px;
+            }
+
+            #leaderboard {
+                right: 10px;
+                top: 10px;
+                min-width: 200px;
+                padding: 15px;
+            }
+
+            #minimap {
+                width: 150px;
+                height: 100px;
+            }
+
             #controls {
-                font-size: 14px;
+                font-size: 10px;
+                padding: 8px 15px;
             }
         }
     </style>
 </head>
 <body>
-<div id="ui">
-    <div id="scoreboard">
-        <div class="score-item">
-            <div class="color-dot" id="myColorDot"></div>
-            <span><span id="myUsername">Anonyme</span>: <span id="myScore">0</span></span>
-            </div>
+    <!-- Menu principal -->
+    <div id="mainMenu">
+        <h1>Snake.io</h1>
+        <p>Mangez, grandissez et dominez l'arène!</p>
+        <input type="text" id="usernameInputMenu" placeholder="Entrez votre pseudo" maxlength="15" autocomplete="off">
+        <button id="playButton">JOUER</button>
     </div>
-    <button id="startButton">Rejoindre la partie</button>
-</div>
-<div id="status"></div>
-<div id="controls"><strong>ESPACE</strong> = Accélérer pendant 2 secondes (réduit la taille) | <strong>Double Tap</strong> = Accélérer sur mobile | <strong>Souris</strong> = Diriger</div>
-<div id="activeEffects"></div>
-<canvas id="gameCanvas"></canvas>
 
-<!-- Définir les SVG des bonus -->
-<svg style="display: none;">
-    <defs>
-        <!-- Bonus de vitesse -->
-        <symbol id="speedBonus" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="18" fill="#FFA500" stroke="white" stroke-width="2"/>
-            <path d="M30 20 L15 10 L15 30 Z" fill="white"/>
-        </symbol>
+    <!-- Canvas du jeu -->
+    <canvas id="gameCanvas"></canvas>
 
-        <!-- Bonus de taille -->
-        <symbol id="sizeBonus" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="18" fill="#9C27B0" stroke="white" stroke-width="2"/>
-            <rect x="12" y="12" width="16" height="16" fill="white"/>
-        </symbol>
+    <!-- UI du jeu -->
+    <div id="gameUI">
+        <!-- Barre du haut -->
+        <div id="topBar">
+            <div id="scoreDisplay">
+                <div id="myColorIndicator"></div>
+                <span>Score: <span id="myScore">0</span></span>
+            </div>
+        </div>
 
-        <!-- Bonus de points -->
-        <symbol id="pointsBonus" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="18" fill="#2196F3" stroke="white" stroke-width="2"/>
-            <text x="20" y="25" text-anchor="middle" fill="white" font-weight="bold" font-size="20">+</text>
-        </symbol>
+        <!-- Bouton options -->
+        <button id="optionsButton">⚙️</button>
 
-        <!-- Bonus d'invincibilité -->
-        <symbol id="invincibleBonus" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="18" fill="#FFEB3B" stroke="white" stroke-width="2"/>
-            <path d="M15 15 L25 15 L25 25 L15 25 Z" fill="white"/>
-        </symbol>
-    </defs>
-</svg>
+        <!-- Leaderboard -->
+        <div id="leaderboard">
+            <h3>🏆 Classement</h3>
+            <div id="leaderboardList"></div>
+        </div>
 
-<!-- Charger Socket.io -->
-<script src="/socket.io/socket.io.js"></script>
+        <!-- Minimap -->
+        <div id="minimap">
+            <canvas id="minimapCanvas"></canvas>
+        </div>
 
-<!-- Charger le script du jeu -->
-<script src="/js/game.js"></script>
+        <!-- Stats du joueur -->
+        <div id="playerStats">
+            <div class="stat-item">
+                <span>Longueur:</span>
+                <span class="stat-value" id="lengthStat">5</span>
+            </div>
+            <div class="stat-item">
+                <span>Éliminations:</span>
+                <span class="stat-value" id="killsStat">0</span>
+            </div>
+            <div class="stat-item">
+                <span>Temps:</span>
+                <span class="stat-value" id="timeStat">0:00</span>
+            </div>
+        </div>
+
+        <!-- Contrôles -->
+        <div id="controls">
+            <span><span class="control-key">SOURIS</span> Diriger</span>
+            <span><span class="control-key">ESPACE</span> Boost</span>
+        </div>
+
+        <!-- Barre de boost -->
+        <div id="boostBar">
+            <div id="boostFill"></div>
+        </div>
+
+        <!-- Message de statut -->
+        <div id="statusMessage"></div>
+    <!-- Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Script du jeu -->
+    <script src="/js/game.js"></script>
+</body>
+</html>

@@ -1,1047 +1,762 @@
-// PARTIE 1 : Initialisation et fonctions principales
+// game.js - Logique du jeu modernisée
 document.addEventListener('DOMContentLoaded', () => {
     // Éléments du DOM
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const minimapCanvas = document.getElementById('minimapCanvas');
+    const minimapCtx = minimapCanvas.getContext('2d');
+    
+    // Éléments UI
+    const mainMenu = document.getElementById('mainMenu');
+    const gameUI = document.getElementById('gameUI');
+    const playButton = document.getElementById('playButton');
+    const usernameInput = document.getElementById('usernameInputMenu');
     const myScoreElement = document.getElementById('myScore');
-    const startButton = document.getElementById('startButton');
-    const ui = document.getElementById("ui");
-    const statusDiv = document.getElementById("status");
-    const myColorDot = document.getElementById("myColorDot");
-    const scoreboard = document.getElementById("scoreboard");
-    const controlsInfo = document.getElementById("controls");
-    const uiHeight = ui.offsetHeight;
+    const statusMessage = document.getElementById('statusMessage');
+    const myColorIndicator = document.getElementById('myColorIndicator');
+    const leaderboardList = document.getElementById('leaderboardList');
+    const boostBar = document.getElementById('boostBar');
+    const boostFill = document.getElementById('boostFill');
+    const optionsButton = document.getElementById('optionsButton');
+    const changeNameModal = document.getElementById('changeNameModal');
+    const newUsernameInput = document.getElementById('newUsernameInput');
+    const confirmNameChange = document.getElementById('confirmNameChange');
+    const cancelNameChange = document.getElementById('cancelNameChange');
+    
+    // Stats
+    const lengthStat = document.getElementById('lengthStat');
+    const killsStat = document.getElementById('killsStat');
+    const timeStat = document.getElementById('timeStat');
 
     // Configuration du jeu
-    let gridSize = 20;
-    let tileCountX, tileCountY;
-    let foodAnimationFrame = 0;
-    let isAccelerating = false;
-    let accelerationTimer = 0;
-    const accelerationDuration = 30; // 2 secondes à environ 15 FPS
-    const boostIndicatorColor = '#FF6F00';
-
+    let gridSize = 15; // Taille réduite pour une map plus grande
+    let worldWidth = 3000; // Largeur du monde en pixels
+    let worldHeight = 3000; // Hauteur du monde en pixels
+    let camera = { x: 0, y: 0 };
+    let zoom = 1;
+    
     // État du jeu
     let playerId;
     let gameState = {
         players: {},
         foods: [],
+        bonuses: [],
+        sparkles: [], // Nouveaux points scintillants
         leaderboard: []
     };
     let isPlaying = false;
     let currentUsername = '';
-
-    // Gestion des manettes
-    let gamepads = {};
-    let gamepadConnected = false;
-    let lastGamepadTimestamp = 0;
-    const gamepadDeadzone = 0.15; // Zone morte des joysticks
-    let gamepadLoopRunning = false;
-
-    // Référence pour le modal
-    let usernameModal;
-
-    // Connecter au serveur WebSocket
+    let startTime = Date.now();
+    let playerKills = 0;
+    
+    // Animation
+    let animationId;
+    let lastTime = 0;
+    let sparkleAnimationFrame = 0;
+    
+    // Boost
+    let isAccelerating = false;
+    let boostEnergy = 100;
+    const maxBoostEnergy = 100;
+    const boostDrainRate = 2;
+    const boostRechargeRate = 0.5;
+    
+    // Socket
     const socket = io();
-
-    // Créer le tableau des meilleurs scores et le bouton de changement de pseudo
-    createLeaderboard();
-    createUsernameButton();
-
-    // Mise à jour des contrôles pour inclure les manettes
-    updateControlsInfo();
-
-    // Initialiser l'API Gamepad
-    initGamepadAPI();
-
-    // Redimensionner le canvas
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - uiHeight;
-
-        if (isPlaying) {
-            // Informer le serveur de la nouvelle taille du terrain
-            socket.emit('canvasResize', {
-                width: canvas.width,
-                height: canvas.height
+    
+    // Particules d'arrière-plan
+    const backgroundParticles = [];
+    const particleCount = 100;
+    
+    // Initialiser les particules
+    function initBackgroundParticles() {
+        for (let i = 0; i < particleCount; i++) {
+            backgroundParticles.push({
+                x: Math.random() * worldWidth,
+                y: Math.random() * worldHeight,
+                size: Math.random() * 3 + 1,
+                opacity: Math.random() * 0.5 + 0.1,
+                speed: Math.random() * 0.5 + 0.1
             });
         }
     }
-
+    
+    // Redimensionner le canvas
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        minimapCanvas.width = 200;
+        minimapCanvas.height = 150;
+    }
+    
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
-
-    // Initialisation du jeu - Réception des données initiales du serveur
+    
+    // Gestion du menu principal
+    playButton.addEventListener('click', () => {
+        const username = usernameInput.value.trim() || `Joueur_${Math.floor(Math.random() * 9999)}`;
+        currentUsername = username;
+        
+        mainMenu.style.display = 'none';
+        gameUI.style.display = 'block';
+        
+        // Se connecter au jeu
+        socket.emit('joinGame', { username: username });
+    });
+    
+    // Permettre de jouer avec Entrée
+    usernameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            playButton.click();
+        }
+    });
+    
+    // Socket events
     socket.on('gameInit', (data) => {
         console.log("Jeu initialisé!", data);
-
+        
         playerId = data.playerId;
         gameState = data.gameState;
+        worldWidth = data.worldWidth || 3000;
+        worldHeight = data.worldHeight || 3000;
         gridSize = data.gridSize;
-        tileCountX = data.tileCountX;
-        tileCountY = data.tileCountY;
-
-        // Stocker le nom d'utilisateur
-        if (gameState.players[playerId]) {
-            currentUsername = gameState.players[playerId].username;
-        }
-
-        // Afficher sa propre couleur
-        myColorDot.style.backgroundColor = gameState.players[playerId].color;
-
-        // Afficher son propre pseudo
-        document.getElementById('myUsername').textContent = currentUsername;
-
-        // Mettre à jour l'interface
-        updateScoreboard();
-        updateLeaderboardDisplay();
-
-        // Afficher le message de bienvenue
-        showStatus("Vous avez rejoint la partie!");
-        setTimeout(() => {
-            hideStatus();
-        }, 2000);
-
-        // Modifier le texte du bouton
-        startButton.textContent = "Rejoindre à nouveau";
-
+        
+        // Initialiser les particules
+        initBackgroundParticles();
+        
+        // Afficher sa couleur
+        myColorIndicator.style.backgroundColor = gameState.players[playerId].color;
+        
+        // Démarrer le jeu
         isPlaying = true;
+        startTime = Date.now();
+        
+        // Démarrer l'animation
+        requestAnimationFrame(gameLoop);
     });
-
-    // Rejoindre le jeu en cliquant sur le bouton
-    startButton.addEventListener('click', () => {
-        if (!isPlaying) {
-            socket.connect(); // Reconnexion au serveur si déconnecté
-        } else {
-            socket.emit('restartPlayer'); // Demande de réinitialisation du joueur
-        }
-    });
-
-    // Réception des mises à jour du jeu
+    
     socket.on('gameUpdate', (newGameState) => {
         gameState = newGameState;
-        updateScoreboard();
-        updateLeaderboardDisplay();
-
-        // Mettre à jour son propre score
+        updateLeaderboard();
+        
+        // Mettre à jour le score
         if (gameState.players[playerId]) {
             myScoreElement.textContent = gameState.players[playerId].score;
+            lengthStat.textContent = gameState.players[playerId].snake.length;
         }
     });
-
-    // Réception d'un nouvel joueur
-    socket.on('playerJoined', (data) => {
-        gameState.players[data.playerId] = data.player;
-        updateScoreboard();
-        showStatus(`Un nouveau joueur a rejoint la partie!`);
-        setTimeout(() => {
-            hideStatus();
-        }, 2000);
-    });
-
-    // Réception du départ d'un joueur
-    socket.on('playerLeft', (data) => {
-        delete gameState.players[data.playerId];
-        updateScoreboard();
-        showStatus(`Un joueur a quitté la partie`);
-        setTimeout(() => {
-            hideStatus();
-        }, 2000);
-    });
-
-    // Réception d'une mise à jour de joueur (ex: changement de pseudo)
-    socket.on('playerUpdated', (data) => {
-        if (gameState.players[data.playerId]) {
-            // Mettre à jour le pseudo du joueur
-            if (data.username) {
-                gameState.players[data.playerId].username = data.username;
-
-                // Si c'est notre propre pseudo qui a été mis à jour
-                if (data.playerId === playerId) {
-                    currentUsername = data.username;
-                    document.getElementById('myUsername').textContent = data.username;
-                }
-
-                // Mettre à jour l'affichage
-                updateScoreboard();
-            }
+    
+    socket.on('playerKill', (data) => {
+        if (data.killerId === playerId) {
+            playerKills++;
+            killsStat.textContent = playerKills;
+            showStatus(`Vous avez éliminé ${data.killedUsername}! +50 points`);
+        } else if (data.killedId === playerId) {
+            showStatus(`Éliminé par ${data.killerUsername}!`);
         }
     });
-
-    // Réception d'une réinitialisation de joueur (après une collision)
+    
     socket.on('playerReset', (data) => {
         myScoreElement.textContent = data.newScore;
         showStatus(data.message);
-        setTimeout(() => {
-            hideStatus();
-        }, 2000);
+        playerKills = 0;
+        killsStat.textContent = 0;
+        startTime = Date.now();
     });
-
-    // Gestion de la déconnexion du serveur
+    
+    socket.on('bonusCaught', (data) => {
+        showStatus(`Bonus ${data.type} activé!`, 2000);
+    });
+    
     socket.on('disconnect', () => {
         isPlaying = false;
-        isAccelerating = false; // Réinitialiser l'accélération en cas de déconnexion
         showStatus("Déconnecté du serveur");
-        startButton.textContent = "Rejoindre à nouveau";
-        // Masquer l'indicateur de boost
-        const boostIndicator = document.getElementById('boostIndicator');
-        if (boostIndicator) {
-            boostIndicator.style.display = 'none';
-        }
+        setTimeout(() => {
+            location.reload();
+        }, 2000);
     });
-
-    // PARTIE 2 : Fonctions de jeu, affichage et interactions utilisateur
-
-    // Fonction pour mettre à jour le tableau des scores
-    function updateScoreboard() {
-        // Supprimer les scores existants sauf le premier (le vôtre)
-        while (scoreboard.children.length > 1) {
-            scoreboard.removeChild(scoreboard.lastChild);
-        }
-
-        // Limiter le nombre de joueurs affichés dans le scoreboard (hors le vôtre)
-        const otherPlayers = Object.entries(gameState.players)
-            .filter(([id]) => id !== playerId)
-            .sort(([, playerA], [, playerB]) => playerB.score - playerA.score)
-            .slice(0, 3); // Afficher seulement les 3 meilleurs autres joueurs
-
-        // Ajouter les scores des autres joueurs
-        for (const [id, player] of otherPlayers) {
-            const scoreItem = document.createElement('div');
-            scoreItem.className = 'score-item';
-
-            const colorDot = document.createElement('div');
-            colorDot.className = 'color-dot';
-            colorDot.style.backgroundColor = player.color;
-
-            const scoreText = document.createElement('span');
-            scoreText.textContent = `${player.username}: ${player.score}`;
-
-            scoreItem.appendChild(colorDot);
-            scoreItem.appendChild(scoreText);
-            scoreboard.appendChild(scoreItem);
-        }
-    }
-
-    // Fonction pour mettre à jour les informations sur les contrôles
-    function updateControlsInfo() {
-        if (controlsInfo) {
-            controlsInfo.innerHTML = '<strong>ESPACE</strong> = Accélérer pendant 2 secondes (réduit la taille) | <strong>Double Tap</strong> = Accélérer sur mobile | <strong>Souris</strong> = Diriger | <strong>Manette</strong> = Joysticks pour diriger, boutons pour accélérer';
-        }
-    }
-
-    // Fonction pour afficher un message de statut
-    function showStatus(message) {
-        statusDiv.textContent = message;
-        statusDiv.style.display = 'block';
-    }
-
-    // Fonction pour cacher le message de statut
-    function hideStatus() {
-        statusDiv.style.display = 'none';
-    }
-
-    // Créer le modal de configuration du pseudo
-    function createUsernameModal() {
-        // Créer l'élément modal
-        const modal = document.createElement('div');
-        modal.id = 'usernameModal';
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <h2>Choisir un pseudo</h2>
-                <input type="text" id="usernameInput" placeholder="Entrez votre pseudo" maxlength="15">
-                <div class="modal-buttons">
-                    <button id="saveUsername">Sauvegarder</button>
-                    <button id="cancelUsername">Annuler</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        // Récupérer les références aux éléments du modal
-        const usernameInput = document.getElementById('usernameInput');
-        const saveButton = document.getElementById('saveUsername');
-        const cancelButton = document.getElementById('cancelUsername');
-
-        // Ajouter les événements
-        saveButton.addEventListener('click', () => {
-            const newUsername = usernameInput.value.trim();
-            if (newUsername) {
-                currentUsername = newUsername;
-                updateUsername(newUsername);
-            }
-            closeUsernameModal();
-        });
-
-        cancelButton.addEventListener('click', closeUsernameModal);
-
-        // Validation à l'appui de la touche Entrée
-        usernameInput.addEventListener('keyup', (e) => {
-            if (e.key === 'Enter') {
-                saveButton.click();
-            } else if (e.key === 'Escape') {
-                cancelButton.click();
-            }
-        });
-
-        return modal;
-    }
-
-    // Ouvrir le modal de configuration du pseudo
-    function openUsernameModal() {
-        if (!usernameModal) {
-            usernameModal = createUsernameModal();
-        }
-
-        // Pré-remplir avec le pseudo actuel si disponible
-        const usernameInput = document.getElementById('usernameInput');
-        if (gameState.players[playerId]) {
-            usernameInput.value = gameState.players[playerId].username || '';
-        } else {
-            usernameInput.value = currentUsername || '';
-        }
-
-        usernameModal.style.display = 'flex';
-        usernameInput.focus();
-    }
-
-    // Fermer le modal de configuration du pseudo
-    function closeUsernameModal() {
-        if (usernameModal) {
-            usernameModal.style.display = 'none';
-        }
-    }
-
-    // Envoyer une mise à jour du pseudo au serveur
-    function updateUsername(username) {
-        socket.emit('updateUsername', { username: username });
-    }
-
-    // Créer le tableau des meilleurs scores
-    function createLeaderboard() {
-        const leaderboardContainer = document.createElement('div');
-        leaderboardContainer.id = 'leaderboardContainer';
-        leaderboardContainer.innerHTML = `
-            <div class="leaderboard-header">
-                <h3>Meilleurs Scores</h3>
-            </div>
-            <div id="leaderboardList" class="leaderboard-list"></div>
-        `;
-        document.body.appendChild(leaderboardContainer);
-    }
-
-    // Mettre à jour l'affichage du tableau des meilleurs scores
-    function updateLeaderboardDisplay() {
-        const leaderboardList = document.getElementById('leaderboardList');
-        if (!leaderboardList) return;
-
-        // Vider la liste actuelle
-        leaderboardList.innerHTML = '';
-
-        // Créer des entrées pour chaque joueur dans le leaderboard
-        gameState.leaderboard.forEach((player, index) => {
-            const playerItem = document.createElement('div');
-            playerItem.className = 'leaderboard-item';
-            if (player.id === playerId) {
-                playerItem.classList.add('current-player');
-            }
-
-            playerItem.innerHTML = `
-                <div class="rank">${index + 1}</div>
-                <div class="leaderboard-color-dot" style="background-color: ${player.color}"></div>
-                <div class="username">${player.username}</div>
-                <div class="score">${player.score}</div>
-            `;
-
-            leaderboardList.appendChild(playerItem);
-        });
-    }
-
-    // Ajouter un bouton pour modifier le pseudo
-    function createUsernameButton() {
-        const usernameButton = document.createElement('button');
-        usernameButton.id = 'changeUsernameButton';
-        usernameButton.textContent = 'Changer de pseudo';
-        usernameButton.addEventListener('click', openUsernameModal);
-
-        // Ajouter le bouton au UI
-        const uiContainer = document.getElementById('ui');
-        uiContainer.appendChild(usernameButton);
-    }
-
-    // Fonction de dessin
-    function draw() {
-        // Effacer le canvas
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Dessiner tous les joueurs
-        for (const id in gameState.players) {
-            const player = gameState.players[id];
-            const snake = player.snake;
-            const isCurrentPlayer = id === playerId;
-
-            // Vérifier si c'est le joueur actuel et s'il est en accélération
-            let playerColor = player.color;
-            let shadowEffect = false;
-
-            if (isCurrentPlayer && isAccelerating) {
-                playerColor = boostIndicatorColor; // Couleur orange pendant l'accélération
-                shadowEffect = true;
-
-                // Ajouter un effet de traînée de boost
-                if (snake.length > 0) {
-                    const head = snake[0];
-                    // Si on a une direction (au moins 2 segments)
-                    if (snake.length > 1) {
-                        const secondSegment = snake[1];
-                        const dirX = head.x - secondSegment.x;
-                        const dirY = head.y - secondSegment.y;
-
-                        // Dessiner des particules de boost
-                        ctx.fillStyle = '#FFCC80'; // Couleur claire pour les particules
-                        for (let i = 0; i < 5; i++) {
-                            const offsetX = -dirX * (i * 8 + Math.random() * 5);
-                            const offsetY = -dirY * (i * 8 + Math.random() * 5);
-                            const particleSize = (5 - i) * 2 + Math.random() * 2;
-
-                            ctx.beginPath();
-                            ctx.arc(
-                                (head.x * gridSize + gridSize/2) + offsetX,
-                                (head.y * gridSize + gridSize/2) + offsetY,
-                                particleSize,
-                                0,
-                                Math.PI * 2
-                            );
-                            ctx.fill();
-                        }
-                    }
-                }
-            }
-
-            // Effet de shadow si en accélération
-            if (shadowEffect) {
-                ctx.shadowColor = boostIndicatorColor;
-                ctx.shadowBlur = 15;
-            } else {
-                ctx.shadowColor = 'transparent';
-                ctx.shadowBlur = 0;
-            }
-
-            // Dessiner le serpent avec une traînée fluide
-            ctx.fillStyle = playerColor;
-            for (let i = 0; i < snake.length; i++) {
-                const segment = snake[i];
-                const nextSegment = snake[i + 1] || segment;
-
-                // Dessiner un cercle à chaque segment
-                ctx.beginPath();
-                ctx.arc(
-                    segment.x * gridSize + gridSize/2,
-                    segment.y * gridSize + gridSize/2,
-                    gridSize/2 - 1,
-                    0,
-                    Math.PI * 2
-                );
-                ctx.fill();
-
-                // Dessiner une ligne entre les segments pour une apparence plus fluide
-                if (i < snake.length - 1) {
-                    ctx.beginPath();
-                    ctx.moveTo(
-                        segment.x * gridSize + gridSize/2,
-                        segment.y * gridSize + gridSize/2
-                    );
-                    ctx.lineTo(
-                        nextSegment.x * gridSize + gridSize/2,
-                        nextSegment.y * gridSize + gridSize/2
-                    );
-                    ctx.lineWidth = gridSize - 2;
-                    ctx.strokeStyle = playerColor;
-                    ctx.stroke();
-                }
-            }
-
-            // Ajouter une indication pour le joueur actuel (un contour lumineux)
-            if (isCurrentPlayer && snake.length > 0) {
-                const head = snake[0];
-                ctx.beginPath();
-                ctx.arc(
-                    head.x * gridSize + gridSize/2,
-                    head.y * gridSize + gridSize/2,
-                    gridSize/2 + 2,
-                    0,
-                    Math.PI * 2
-                );
-                ctx.strokeStyle = 'gold';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                // Dessiner le pseudo au-dessus de la tête
-                ctx.fillStyle = 'black';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(
-                    player.username,
-                    head.x * gridSize + gridSize/2,
-                    head.y * gridSize - 10
-                );
-            } else if (snake.length > 0) {
-                // Dessiner le pseudo pour les autres joueurs
-                const head = snake[0];
-                ctx.fillStyle = 'black';
-                ctx.font = '12px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(
-                    player.username,
-                    head.x * gridSize + gridSize/2,
-                    head.y * gridSize - 10
-                );
-            }
-        }
-
-        // Dessiner toutes les nourritures
-        foodAnimationFrame++;
-        for (const food of gameState.foods) {
-            const pulseRadius = (gridSize / 2) * (1 + 0.3 * Math.sin(foodAnimationFrame / 5));
-
-            ctx.fillStyle = '#FF5252';
-            ctx.beginPath();
-            ctx.arc(
-                food.x * gridSize + gridSize/2,
-                food.y * gridSize + gridSize/2,
-                pulseRadius,
-                0,
-                Math.PI * 2
-            );
-            ctx.fill();
-        }
-
-        // Dessiner la grille pour plus de clarté
-        ctx.strokeStyle = '#f0f0f0';
-        ctx.lineWidth = 1;
-        for (let x = 0; x <= tileCountX; x++) {
-            ctx.beginPath();
-            ctx.moveTo(x * gridSize, 0);
-            ctx.lineTo(x * gridSize, canvas.height);
-            ctx.stroke();
-        }
-        for (let y = 0; y <= tileCountY; y++) {
-            ctx.beginPath();
-            ctx.moveTo(0, y * gridSize);
-            ctx.lineTo(canvas.width, y * gridSize);
-            ctx.stroke();
-        }
-
-        // Continuer la boucle d'animation
-        requestAnimationFrame(draw);
-    }
-
-    // PARTIE 3: Gestion des contrôles et de la manette
-
-    // Mettre à jour la cible au clic ou au toucher
+    
+    // Gestion de la souris
     function updateTarget(e) {
         if (!isPlaying || !gameState.players[playerId]) return;
-
+        
         const rect = canvas.getBoundingClientRect();
-        const targetX = (e.clientX || e.touches[0].clientX) - rect.left;
-        const targetY = (e.clientY || e.touches[0].clientY) - rect.top;
-
-        // Envoyer la nouvelle cible au serveur
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Convertir en coordonnées du monde
+        const worldX = camera.x + mouseX / zoom;
+        const worldY = camera.y + mouseY / zoom;
+        
         socket.emit('updateTarget', {
-            targetX: targetX,
-            targetY: targetY
+            targetX: worldX,
+            targetY: worldY
         });
     }
-
-    // Écouter les événements de souris
+    
     canvas.addEventListener('mousemove', updateTarget);
     canvas.addEventListener('click', updateTarget);
-
-    // Gérer le toucher sur mobile
+    
+    // Gestion tactile
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        updateTarget(e);
+        const touch = e.touches[0];
+        updateTarget({
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
     }, { passive: false });
-    canvas.addEventListener('touchstart', updateTarget, { passive: false });
-
-    // Gestion de l'accélération avec la touche espace
-    document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && isPlaying && !isAccelerating) {
-            console.log('Espace pressé: activation de l\'accélération');
-            startAcceleration();
-        }
-    });
-
-    // Support tactile pour l'accélération (double tap)
+    
+    // Double tap pour boost sur mobile
     let lastTapTime = 0;
     canvas.addEventListener('touchstart', (e) => {
-        const currentTime = new Date().getTime();
+        const currentTime = Date.now();
         const tapLength = currentTime - lastTapTime;
-        if (tapLength < 300 && tapLength > 0 && isPlaying && !isAccelerating) {
-            // Double tap détecté, activer l'accélération
-            startAcceleration();
+        if (tapLength < 300 && tapLength > 0 && isPlaying && boostEnergy > 20) {
+            startBoost();
             e.preventDefault();
         }
         lastTapTime = currentTime;
     });
-
-    // Création et gestion de l'indicateur visuel de boost
-    const boostIndicator = document.createElement('div');
-    boostIndicator.id = 'boostIndicator';
-    boostIndicator.innerHTML = `
-        <div id="boostLabel">BOOST!</div>
-        <div id="boostProgressContainer">
-            <div id="boostProgress"></div>
-        </div>
-    `;
-    document.body.appendChild(boostIndicator);
-
-    // Ajouter les styles CSS pour l'interface
-    const style = document.createElement('style');
-    style.textContent = `
-        #boostIndicator {
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 60, 0, 0.9);
-            padding: 12px 30px;
-            border-radius: 30px;
-            text-align: center;
-            z-index: 9999;
-            display: none;
-            box-shadow: 0 0 25px rgba(255, 100, 0, 0.9);
-            animation: pulse 0.5s infinite alternate;
-            pointer-events: none;
-            font-family: Arial, sans-serif;
-            border: 3px solid white;
+    
+    // Gestion du boost
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && isPlaying && boostEnergy > 20 && !isAccelerating) {
+            startBoost();
         }
-        
-        #boostLabel {
-            color: white;
-            font-weight: bold;
-            font-size: 24px;
-            text-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
-            margin-bottom: 8px;
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space' && isAccelerating) {
+            stopBoost();
         }
-        
-        #boostProgressContainer {
-            width: 150px;
-            height: 12px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            overflow: hidden;
-            margin: 0 auto;
-            border: 2px solid rgba(255, 255, 255, 0.8);
+    });
+    
+    function startBoost() {
+        if (boostEnergy > 20) {
+            isAccelerating = true;
+            boostBar.style.display = 'block';
+            socket.emit('updateAcceleration', { isAccelerating: true });
         }
-        
-        #boostProgress {
-            height: 100%;
-            width: 100%;
-            background: white;
-            border-radius: 4px;
-            transition: width 0.1s linear;
-        }
-        
-        @keyframes pulse {
-            from { transform: translateX(-50%) scale(1); filter: brightness(0.9); }
-            to { transform: translateX(-50%) scale(1.1); filter: brightness(1.1); }
-        }
-        
-        /* Styles pour le Leaderboard */
-        #leaderboardContainer {
-            position: fixed;
-            top: 70px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            border-radius: 10px;
-            padding: 10px;
-            width: 250px;
-            z-index: 100;
-        }
-        
-        .leaderboard-header {
-            text-align: center;
-            margin-bottom: 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-            padding-bottom: 5px;
-        }
-        
-        .leaderboard-header h3 {
-            margin: 0;
-            font-size: 18px;
-        }
-        
-        .leaderboard-list {
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        .leaderboard-item {
-            display: flex;
-            align-items: center;
-            padding: 5px 0;
-            margin-bottom: 5px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .leaderboard-item.current-player {
-            background: rgba(255, 215, 0, 0.2);
-            border-radius: 5px;
-            padding: 5px;
-        }
-        
-        .rank {
-            width: 30px;
-            text-align: center;
-            font-weight: bold;
-        }
-        
-        .leaderboard-color-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin: 0 10px;
-        }
-        
-        .username {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .score {
-            width: 50px;
-            text-align: right;
-            font-weight: bold;
-        }
-        
-        /* Style du bouton pour changer de pseudo */
-        #changeUsernameButton {
-            margin-left: 10px;
-            padding: 5px 15px;
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        #changeUsernameButton:hover {
-            background-color: #0b7dda;
-        }
-        
-        /* Styles pour le modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .modal-content {
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            max-width: 400px;
-            width: 100%;
-        }
-        
-        .modal-content h2 {
-            margin-top: 0;
-            color: #333;
-        }
-        
-        #usernameInput {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-        
-        .modal-buttons {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .modal-buttons button {
-            padding: 8px 15px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
-        #saveUsername {
-            background-color: #4CAF50;
-            color: white;
-        }
-        
-        #cancelUsername {
-            background-color: #f44336;
-            color: white;
-        }
-        
-        /* Style pour la notification de manette */
-        #gamepadNotification {
-            position: fixed;
-            top: 120px;
-            left: 20px;
-            background: rgba(0, 150, 255, 0.8);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 5px;
-            font-size: 14px;
-            z-index: 100;
-            display: none;
-            animation: fadeIn 0.3s;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Fonction pour démarrer l'accélération
-    function startAcceleration() {
-        isAccelerating = true;
-        accelerationTimer = accelerationDuration;
-
-        // Envoyer l'état d'accélération au serveur
-        socket.emit('updateAcceleration', { isAccelerating: true });
-
-        // Afficher l'indicateur visuel
-        boostIndicator.style.display = 'block';
-
-        // Démarrer le timer pour l'accélération
-        updateAccelerationTimer();
     }
-
-    // Fonction pour mettre à jour le timer d'accélération
-    function updateAccelerationTimer() {
-        if (accelerationTimer > 0) {
-            accelerationTimer--;
-
-            // Mettre à jour la barre de progression
-            const boostProgress = document.getElementById('boostProgress');
-            if (boostProgress) {
-                const percentage = (accelerationTimer / accelerationDuration) * 100;
-                boostProgress.style.width = percentage + '%';
+    
+    function stopBoost() {
+        isAccelerating = false;
+        socket.emit('updateAcceleration', { isAccelerating: false });
+    }
+    
+    // Mettre à jour l'énergie du boost
+    function updateBoostEnergy(deltaTime) {
+        if (isAccelerating && boostEnergy > 0) {
+            boostEnergy -= boostDrainRate;
+            if (boostEnergy <= 0) {
+                boostEnergy = 0;
+                stopBoost();
             }
-
-            setTimeout(updateAccelerationTimer, 1000/15); // Environ 15 FPS
-        } else {
-
-            // Fin de l'accélération
-            isAccelerating = false;
-
-            // Informer le serveur
-            socket.emit('updateAcceleration', { isAccelerating: false });
-
-            // Masquer l'indicateur
-            boostIndicator.style.display = 'none';
-        }
-    }
-
-    // Initialiser l'API Gamepad
-    function initGamepadAPI() {
-        // Écouter les événements de connexion/déconnexion de manette
-        window.addEventListener("gamepadconnected", handleGamepadConnected);
-        window.addEventListener("gamepaddisconnected", handleGamepadDisconnected);
-
-        // Créer la notification de manette
-        createGamepadNotification();
-
-        // Vérifier les manettes déjà connectées
-        const existingGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-        for (let i = 0; i < existingGamepads.length; i++) {
-            if (existingGamepads[i]) {
-                handleGamepadConnected({ gamepad: existingGamepads[i] });
+        } else if (!isAccelerating && boostEnergy < maxBoostEnergy) {
+            boostEnergy += boostRechargeRate;
+            if (boostEnergy > maxBoostEnergy) {
+                boostEnergy = maxBoostEnergy;
             }
         }
-    }
-
-    // Créer la notification de manette
-    function createGamepadNotification() {
-        const notification = document.createElement('div');
-        notification.id = 'gamepadNotification';
-        document.body.appendChild(notification);
-    }
-
-    // Afficher la notification de manette
-    function showGamepadNotification(message, duration = 3000) {
-        const notification = document.getElementById('gamepadNotification');
-        if (notification) {
-            notification.textContent = message;
-            notification.style.display = 'block';
-
-            // Masquer après la durée spécifiée
-            setTimeout(() => {
-                notification.style.display = 'none';
-            }, duration);
+        
+        // Mettre à jour la barre visuelle
+        boostFill.style.width = `${boostEnergy}%`;
+        
+        // Cacher la barre si pleine et pas en boost
+        if (boostEnergy >= maxBoostEnergy && !isAccelerating) {
+            boostBar.style.display = 'none';
         }
     }
-
-    // Gérer la connexion d'une manette
-    function handleGamepadConnected(event) {
-        const gamepad = event.gamepad || event;
-        gamepads[gamepad.index] = gamepad;
-        gamepadConnected = true;
-        console.log(`Manette connectée: ${gamepad.id}`);
-
-        // Afficher un message à l'utilisateur
-        showGamepadNotification(`Manette connectée: ${gamepad.id.split('(')[0]}`);
-
-        // Démarrer la boucle de mise à jour de la manette
-        if (!gamepadLoopRunning) {
-            gamepadLoopRunning = true;
-            updateGamepadState();
+    
+    // Options
+    optionsButton.addEventListener('click', () => {
+        changeNameModal.style.display = 'block';
+        newUsernameInput.value = currentUsername;
+        newUsernameInput.focus();
+    });
+    
+    confirmNameChange.addEventListener('click', () => {
+        const newName = newUsernameInput.value.trim();
+        if (newName && newName !== currentUsername) {
+            currentUsername = newName;
+            socket.emit('updateUsername', { username: newName });
         }
-    }
-
-    // Gérer la déconnexion d'une manette
-    function handleGamepadDisconnected(event) {
-        delete gamepads[event.gamepad.index];
-
-        // Vérifier s'il reste des manettes connectées
-        let stillConnected = false;
-        for (const gamepadId in gamepads) {
-            if (gamepads[gamepadId]) {
-                stillConnected = true;
-                break;
+        changeNameModal.style.display = 'none';
+    });
+    
+    cancelNameChange.addEventListener('click', () => {
+        changeNameModal.style.display = 'none';
+    });
+    
+    // Mettre à jour le leaderboard
+    function updateLeaderboard() {
+        leaderboardList.innerHTML = '';
+        
+        gameState.leaderboard.slice(0, 10).forEach((player, index) => {
+            const item = document.createElement('div');
+            item.className = 'leaderboard-item';
+            if (player.id === playerId) {
+                item.classList.add('current-player');
             }
-        }
-
-        gamepadConnected = stillConnected;
-        console.log(`Manette déconnectée: ${event.gamepad.id}`);
-
-        // Afficher un message à l'utilisateur
-        showGamepadNotification(`Manette déconnectée: ${event.gamepad.id.split('(')[0]}`);
+            
+            item.innerHTML = `
+                <span class="leaderboard-rank">#${index + 1}</span>
+                <div class="leaderboard-color" style="background-color: ${player.color}"></div>
+                <span class="leaderboard-name">${player.username}</span>
+                <span class="leaderboard-score">${player.score}</span>
+            `;
+            
+            leaderboardList.appendChild(item);
+        });
     }
-
-    // Mise à jour de l'état de la manette
-    function updateGamepadState() {
-        // Mettre à jour la liste des manettes
-        const currentGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-        for (let i = 0; i < currentGamepads.length; i++) {
-            if (currentGamepads[i]) {
-                gamepads[currentGamepads[i].index] = currentGamepads[i];
-            }
+    
+    // Afficher un message de statut
+    function showStatus(message, duration = 3000) {
+        statusMessage.textContent = message;
+        statusMessage.style.display = 'block';
+        setTimeout(() => {
+            statusMessage.style.display = 'none';
+        }, duration);
+    }
+    
+    // Mettre à jour le temps de jeu
+    function updateGameTime() {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        timeStat.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Calculer la caméra
+    function updateCamera() {
+        if (!gameState.players[playerId]) return;
+        
+        const player = gameState.players[playerId];
+        const head = player.snake[0];
+        
+        // Centrer la caméra sur le joueur
+        camera.x = head.x * gridSize - canvas.width / 2;
+        camera.y = head.y * gridSize - canvas.height / 2;
+        
+        // Limiter la caméra aux bords du monde
+        camera.x = Math.max(0, Math.min(worldWidth - canvas.width, camera.x));
+        camera.y = Math.max(0, Math.min(worldHeight - canvas.height, camera.y));
+    }
+    
+    // Dessiner la grille d'arrière-plan
+    function drawGrid() {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        
+        const startX = Math.floor(camera.x / gridSize) * gridSize;
+        const startY = Math.floor(camera.y / gridSize) * gridSize;
+        const endX = startX + canvas.width + gridSize;
+        const endY = startY + canvas.height + gridSize;
+        
+        // Lignes verticales
+        for (let x = startX; x <= endX; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x - camera.x, 0);
+            ctx.lineTo(x - camera.x, canvas.height);
+            ctx.stroke();
         }
-
-        // Traiter toutes les manettes connectées
-        for (const gamepadId in gamepads) {
-            const gamepad = gamepads[gamepadId];
-            if (!gamepad) continue;
-
-            // Éviter les mises à jour redondantes
-            if (gamepad.timestamp && gamepad.timestamp === lastGamepadTimestamp) {
-                continue;
+        
+        // Lignes horizontales
+        for (let y = startY; y <= endY; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y - camera.y);
+            ctx.lineTo(canvas.width, y - camera.y);
+            ctx.stroke();
+        }
+    }
+    
+    // Dessiner les particules d'arrière-plan
+    function drawBackgroundParticles() {
+        backgroundParticles.forEach(particle => {
+            // Animation de défilement
+            particle.y -= particle.speed;
+            if (particle.y < 0) {
+                particle.y = worldHeight;
+                particle.x = Math.random() * worldWidth;
             }
-
-            lastGamepadTimestamp = gamepad.timestamp;
-
-            // Ne traiter les entrées que si le jeu est actif
-            if (isPlaying && gameState.players[playerId]) {
-                // Gérer les joysticks pour la direction
-                const leftStickX = applyDeadzone(gamepad.axes[0]);
-                const leftStickY = applyDeadzone(gamepad.axes[1]);
-                const rightStickX = applyDeadzone(gamepad.axes[2]);
-                const rightStickY = applyDeadzone(gamepad.axes[3]);
-
-                // Utiliser le stick avec le plus grand déplacement
-                let activeStickX = 0;
-                let activeStickY = 0;
-
-                if (Math.abs(leftStickX) > 0 || Math.abs(leftStickY) > 0) {
-                    activeStickX = leftStickX;
-                    activeStickY = leftStickY;
-                } else if (Math.abs(rightStickX) > 0 || Math.abs(rightStickY) > 0) {
-                    activeStickX = rightStickX;
-                    activeStickY = rightStickY;
-                }
-
-                // Mise à jour de la cible si le joystick est utilisé
-                if (activeStickX !== 0 || activeStickY !== 0) {
-                    // Obtenir la position actuelle du serpent
-                    const snake = gameState.players[playerId].snake;
-                    if (snake && snake.length > 0) {
-                        const head = snake[0];
-
-                        // Calculer la nouvelle cible en fonction du joystick
-                        // Le joystick donne une direction, nous devons la convertir en position
-                        const distance = 300; // Distance fixe pour la cible
-                        const targetX = (head.x * gridSize + gridSize/2) + (activeStickX * distance);
-                        const targetY = (head.y * gridSize + gridSize/2) + (activeStickY * distance);
-
-                        // Envoyer la nouvelle cible au serveur
-                        socket.emit('updateTarget', {
-                            targetX: targetX,
-                            targetY: targetY
-                        });
-                    }
-                }
-
-                // Gérer les boutons pour l'accélération
-                // Types de manettes courants :
-                // - PS5/4: X = 0, Circle = 1, Square = 2, Triangle = 3, L1 = 4, R1 = 5, L2 = 6, R2 = 7
-                // - Xbox: A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7
-                const accelerateButtons = [0, 1, 2, 5, 7]; // X/A, Circle/B, Square/X, R1/RB, R2/RT
-
-                let shouldAccelerate = false;
-                for (const buttonIndex of accelerateButtons) {
-                    if (gamepad.buttons[buttonIndex] && gamepad.buttons[buttonIndex].pressed) {
-                        shouldAccelerate = true;
+            
+            // Vérifier si visible
+            const screenX = particle.x - camera.x;
+            const screenY = particle.y - camera.y;
+            
+            if (screenX >= -10 && screenX <= canvas.width + 10 &&
+                screenY >= -10 && screenY <= canvas.height + 10) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${particle.opacity})`;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+    }
+    
+    // Dessiner les points scintillants
+    function drawSparkles() {
+        sparkleAnimationFrame++;
+        
+        gameState.sparkles.forEach(sparkle => {
+            const screenX = sparkle.x * gridSize - camera.x;
+            const screenY = sparkle.y * gridSize - camera.y;
+            
+            if (screenX >= -20 && screenX <= canvas.width + 20 &&
+                screenY >= -20 && screenY <= canvas.height + 20) {
+                
+                // Animation de scintillement
+                const pulse = Math.sin(sparkleAnimationFrame * 0.1 + sparkle.id) * 0.3 + 0.7;
+                const size = sparkle.size * pulse;
+                
+                // Dessiner le point scintillant avec un effet de halo
+                ctx.shadowColor = sparkle.color;
+                ctx.shadowBlur = 10;
+                
+                ctx.fillStyle = sparkle.color;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Ajouter un effet d'étoile
+                ctx.strokeStyle = sparkle.color;
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = pulse * 0.5;
+                
+                // Lignes en croix
+                ctx.beginPath();
+                ctx.moveTo(screenX - size * 2, screenY);
+                ctx.lineTo(screenX + size * 2, screenY);
+                ctx.moveTo(screenX, screenY - size * 2);
+                ctx.lineTo(screenX, screenY + size * 2);
+                ctx.stroke();
+                
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+            }
+        });
+    }
+    
+    // Dessiner la nourriture
+    function drawFood() {
+        gameState.foods.forEach(food => {
+            const screenX = food.x * gridSize - camera.x;
+            const screenY = food.y * gridSize - camera.y;
+            
+            if (screenX >= -20 && screenX <= canvas.width + 20 &&
+                screenY >= -20 && screenY <= canvas.height + 20) {
+                
+                // Animation de pulsation
+                const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 1;
+                const size = (gridSize / 3) * pulse;
+                
+                // Effet de lueur
+                ctx.shadowColor = '#FF5252';
+                ctx.shadowBlur = 8;
+                
+                ctx.fillStyle = '#FF5252';
+                ctx.beginPath();
+                ctx.arc(screenX + gridSize/2, screenY + gridSize/2, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.shadowBlur = 0;
+            }
+        });
+    }
+    
+    // Dessiner les bonus
+    function drawBonuses() {
+        gameState.bonuses.forEach(bonus => {
+            const screenX = bonus.x * gridSize - camera.x;
+            const screenY = bonus.y * gridSize - camera.y;
+            
+            if (screenX >= -40 && screenX <= canvas.width + 40 &&
+                screenY >= -40 && screenY <= canvas.height + 40) {
+                
+                // Animation de rotation
+                const rotation = Date.now() * 0.002;
+                
+                ctx.save();
+                ctx.translate(screenX + gridSize/2, screenY + gridSize/2);
+                ctx.rotate(rotation);
+                
+                // Dessiner le bonus selon son type
+                ctx.shadowColor = bonus.color;
+                ctx.shadowBlur = 15;
+                
+                switch(bonus.type) {
+                    case 'speed':
+                        // Éclair
+                        ctx.fillStyle = bonus.color;
+                        ctx.beginPath();
+                        ctx.moveTo(-10, -15);
+                        ctx.lineTo(5, -5);
+                        ctx.lineTo(-5, 5);
+                        ctx.lineTo(10, 15);
+                        ctx.lineTo(-5, 5);
+                        ctx.lineTo(5, -5);
+                        ctx.fill();
                         break;
-                    }
+                    
+                    case 'size':
+                        // Carré
+                        ctx.fillStyle = bonus.color;
+                        ctx.fillRect(-12, -12, 24, 24);
+                        break;
+                    
+                    case 'points':
+                        // Étoile
+                        ctx.fillStyle = bonus.color;
+                        drawStar(0, 0, 5, 15, 7);
+                        break;
+                    
+                    case 'invincible':
+                        // Bouclier
+                        ctx.fillStyle = bonus.color;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -15);
+                        ctx.lineTo(12, -8);
+                        ctx.lineTo(12, 8);
+                        ctx.lineTo(0, 15);
+                        ctx.lineTo(-12, 8);
+                        ctx.lineTo(-12, -8);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
                 }
-
-                // Gérer l'accélération
-                if (shouldAccelerate && !isAccelerating) {
-                    console.log('Bouton d\'accélération pressé sur la manette');
-                    startAcceleration();
-                }
+                
+                ctx.restore();
+                ctx.shadowBlur = 0;
             }
+        });
+    }
+    
+    // Fonction pour dessiner une étoile
+    function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+        let rot = Math.PI / 2 * 3;
+        let x = cx;
+        let y = cy;
+        const step = Math.PI / spikes;
+        
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - outerRadius);
+        
+        for (let i = 0; i < spikes; i++) {
+            x = cx + Math.cos(rot) * outerRadius;
+            y = cy + Math.sin(rot) * outerRadius;
+            ctx.lineTo(x, y);
+            rot += step;
+            
+            x = cx + Math.cos(rot) * innerRadius;
+            y = cy + Math.sin(rot) * innerRadius;
+            ctx.lineTo(x, y);
+            rot += step;
         }
-
-        // Continuer la boucle si des manettes sont connectées
-        if (gamepadConnected) {
-            requestAnimationFrame(updateGamepadState);
-        } else {
-            gamepadLoopRunning = false;
+        
+        ctx.lineTo(cx, cy - outerRadius);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    // Dessiner les serpents
+    function drawSnakes() {
+        for (const id in gameState.players) {
+            const player = gameState.players[id];
+            const isCurrentPlayer = id === playerId;
+            
+            // Dessiner le corps du serpent
+            ctx.strokeStyle = player.color;
+            ctx.fillStyle = player.color;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Effet de lueur pour le joueur actuel
+            if (isCurrentPlayer) {
+                ctx.shadowColor = player.color;
+                ctx.shadowBlur = 10;
+            }
+            
+            // Dessiner le corps avec des segments fluides
+            if (player.snake.length > 1) {
+                ctx.beginPath();
+                const firstSegment = player.snake[0];
+                ctx.moveTo(
+                    firstSegment.x * gridSize - camera.x + gridSize/2,
+                    firstSegment.y * gridSize - camera.y + gridSize/2
+                );
+                
+                // Utiliser des courbes de Bézier pour un mouvement fluide
+                for (let i = 1; i < player.snake.length - 1; i++) {
+                    const current = player.snake[i];
+                    const next = player.snake[i + 1];
+                    
+                    const cpx = current.x * gridSize - camera.x + gridSize/2;
+                    const cpy = current.y * gridSize - camera.y + gridSize/2;
+                    const x = (current.x + next.x) / 2 * gridSize - camera.x + gridSize/2;
+                    const y = (current.y + next.y) / 2 * gridSize - camera.y + gridSize/2;
+                    
+                    ctx.quadraticCurveTo(cpx, cpy, x, y);
+                }
+                
+                // Dernier segment
+                const lastSegment = player.snake[player.snake.length - 1];
+                ctx.lineTo(
+                    lastSegment.x * gridSize - camera.x + gridSize/2,
+                    lastSegment.y * gridSize - camera.y + gridSize/2
+                );
+                
+                // Largeur variable selon la position dans le corps
+                ctx.lineWidth = gridSize;
+                ctx.stroke();
+            }
+            
+            // Dessiner la tête
+            const head = player.snake[0];
+            const headX = head.x * gridSize - camera.x + gridSize/2;
+            const headY = head.y * gridSize - camera.y + gridSize/2;
+            
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(headX, headY, gridSize/2 + 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Yeux du serpent
+            if (player.snake.length > 1) {
+                const neck = player.snake[1];
+                const angle = Math.atan2(head.y - neck.y, head.x - neck.x);
+                
+                ctx.fillStyle = 'white';
+                const eyeDistance = gridSize * 0.3;
+                const eyeSize = gridSize * 0.15;
+                
+                // Œil gauche
+                ctx.beginPath();
+                ctx.arc(
+                    headX + Math.cos(angle - 0.5) * eyeDistance,
+                    headY + Math.sin(angle - 0.5) * eyeDistance,
+                    eyeSize,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Œil droit
+                ctx.beginPath();
+                ctx.arc(
+                    headX + Math.cos(angle + 0.5) * eyeDistance,
+                    headY + Math.sin(angle + 0.5) * eyeDistance,
+                    eyeSize,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Pupilles
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(
+                    headX + Math.cos(angle - 0.5) * eyeDistance,
+                    headY + Math.sin(angle - 0.5) * eyeDistance,
+                    eyeSize * 0.5,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(
+                    headX + Math.cos(angle + 0.5) * eyeDistance,
+                    headY + Math.sin(angle + 0.5) * eyeDistance,
+                    eyeSize * 0.5,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+            
+            // Nom du joueur
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 14px Poppins';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.strokeText(player.username, headX, headY - gridSize - 5);
+            ctx.fillText(player.username, headX, headY - gridSize - 5);
+            
+            ctx.shadowBlur = 0;
         }
     }
-
-    // Appliquer une zone morte aux axes du joystick
-    function applyDeadzone(value) {
-        // Si la valeur est inférieure à la zone morte, retourner 0
-        if (Math.abs(value) < gamepadDeadzone) {
-            return 0;
+    
+    // Dessiner la minimap
+    function drawMinimap() {
+        // Fond de la minimap
+        minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+        
+        const scale = Math.min(
+            minimapCanvas.width / worldWidth,
+            minimapCanvas.height / worldHeight
+        );
+        
+        // Dessiner tous les joueurs sur la minimap
+        for (const id in gameState.players) {
+            const player = gameState.players[id];
+            const head = player.snake[0];
+            
+            const x = head.x * gridSize * scale;
+            const y = head.y * gridSize * scale;
+            
+            minimapCtx.fillStyle = player.color;
+            minimapCtx.beginPath();
+            minimapCtx.arc(x, y, id === playerId ? 3 : 2, 0, Math.PI * 2);
+            minimapCtx.fill();
         }
-
-        // Sinon, normaliser la valeur après application de la zone morte
-        const sign = value > 0 ? 1 : -1;
-        return sign * (Math.abs(value) - gamepadDeadzone) / (1 - gamepadDeadzone);
+        
+        // Indicateur de la zone visible
+        if (gameState.players[playerId]) {
+            minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            minimapCtx.strokeRect(
+                camera.x * scale,
+                camera.y * scale,
+                canvas.width * scale,
+                canvas.height * scale
+            );
+        }
     }
-
-    // Démarrer la boucle de dessin
-    draw();
+    
+    // Boucle de jeu principale
+    function gameLoop(currentTime) {
+        if (!isPlaying) return;
+        
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+        
+        // Mettre à jour la caméra
+        updateCamera();
+        
+        // Mettre à jour le boost
+        updateBoostEnergy(deltaTime);
+        
+        // Mettre à jour le temps
+        updateGameTime();
+        
+        // Effacer le canvas
+        ctx.fillStyle = '#111922';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Dessiner le jeu
+        drawGrid();
+        drawBackgroundParticles();
+        drawSparkles();
+        drawFood();
+        drawBonuses();
+        drawSnakes();
+        
+        // Dessiner la minimap
+        drawMinimap();
+        
+        // Continuer l'animation
+        animationId = requestAnimationFrame(gameLoop);
+    }
 });
